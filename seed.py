@@ -1,6 +1,6 @@
 """
 Database seeding script for Insighta Labs profiles.
-Seeds 2026 demographic profiles from JSON data.
+Seeds 2026 demographic profiles from JSON data and default users.
 """
 
 import json
@@ -8,13 +8,64 @@ import requests
 import sys
 from sqlalchemy.exc import IntegrityError
 from database import SessionLocal, init_db
-from models import Profile
-from datetime import datetime
+from models import Profile, User
+from datetime import datetime, timezone
 import uuid
 
 # Fix Unicode encoding for Windows
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
+
+
+def seed_users():
+    """Create default admin and analyst users"""
+    db = SessionLocal()
+    
+    try:
+        # Create default admin user if it doesn't exist
+        admin_github_id = "10000000"
+        existing_admin = db.query(User).filter(User.github_id == admin_github_id).first()
+        
+        if not existing_admin:
+            admin_user = User(
+                id=uuid.uuid4(),
+                github_id=admin_github_id,
+                username="admin_user",
+                email="admin@insighta.dev",
+                role="admin",
+                is_active=True,
+                last_login_at=datetime.now(timezone.utc),
+            )
+            db.add(admin_user)
+            print(f"✓ Admin user created")
+        
+        # Create default analyst user if it doesn't exist
+        analyst_github_id = "10000001"
+        existing_analyst = db.query(User).filter(User.github_id == analyst_github_id).first()
+        
+        if not existing_analyst:
+            analyst_user = User(
+                id=uuid.uuid4(),
+                github_id=analyst_github_id,
+                username="analyst_user",
+                email="analyst@insighta.dev",
+                role="analyst",
+                is_active=True,
+                last_login_at=datetime.now(timezone.utc),
+            )
+            db.add(analyst_user)
+            print(f"✓ Analyst user created")
+        
+        db.commit()
+        
+    except IntegrityError:
+        db.rollback()
+        print("⚠ Users already exist, skipping user seeding")
+    except Exception as e:
+        db.rollback()
+        print(f"✗ Error seeding users: {str(e)}")
+    finally:
+        db.close()
 
 
 def seed_database():

@@ -16,7 +16,7 @@ load_dotenv()
 from database import init_db
 from routes import router as profiles_router
 from auth_routes import router as auth_router
-from seed import seed_database
+from seed import seed_database, seed_users
 from auth.middleware import RateLimitMiddleware, LoggingMiddleware, APIVersionMiddleware
 
 # Configure logging
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Initialize database and seed data
 init_db()
 seed_database()
+seed_users()
 
 # Create FastAPI app
 app = FastAPI(
@@ -46,7 +47,7 @@ app.add_middleware(
 # Add custom middleware in reverse order (last added = first executed)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(LoggingMiddleware)
-app.add_middleware(RateLimitMiddleware, auth_limit=10, general_limit=60)
+app.add_middleware(RateLimitMiddleware, auth_limit=100, general_limit=200)
 
 # Include routes
 app.include_router(auth_router)
