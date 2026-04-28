@@ -38,6 +38,22 @@ def _generate_pagination_links(base_url: str, page: int, limit: int, total: int)
     return links
 
 
+@router.get("/users/me")
+async def get_current_user_info(
+    current_user: User = Depends(CurrentUser.get_current_user),
+):
+    """
+    Get current authenticated user information.
+    
+    Requires authentication.
+    Returns user details including role.
+    """
+    return {
+        "status": "success",
+        "user": current_user.to_dict(),
+    }
+
+
 @router.get("/profiles", response_model=ProfileListResponse)
 async def get_profiles(
     # Filtering parameters

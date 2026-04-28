@@ -101,7 +101,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
 
 class APIVersionMiddleware(BaseHTTPMiddleware):
-    """Validate API version header for /api/* endpoints"""
+    """Validate API version header for /api/* endpoints if provided"""
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Only check /api/* endpoints (but not /auth/*)
@@ -110,21 +110,13 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         ):
             api_version = request.headers.get("X-API-Version")
 
-            if not api_version:
+            # If version is provided, validate it
+            if api_version and api_version != "1":
                 return JSONResponse(
                     status_code=400,
                     content={
                         "status": "error",
-                        "message": "API version header required",
-                    },
-                )
-
-            if api_version != "1":
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "status": "error",
-                        "message": "Unsupported API version",
+                        "message": f"Unsupported API version: {api_version}. Supported: 1",
                     },
                 )
 

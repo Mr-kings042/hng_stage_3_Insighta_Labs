@@ -19,12 +19,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.get("/github")
 async def github_oauth_start(
-    client_type: str = Query("web", description="web or cli")
+    client_type: str = Query("web", description="web or cli"),
 ):
     """
     Start GitHub OAuth flow
     
-    Returns OAuth authorization URL and PKCE state information
+    Returns JSON with OAuth authorization URL and PKCE data.
+    For web clients, the authorization_url should be used to redirect to GitHub.
+    For CLI clients, the state and code_verifier must be saved for later use.
     """
     try:
         oauth_handler = GitHubOAuthHandler()
@@ -51,33 +53,67 @@ async def github_oauth_start(
 
 @router.get("/github/callback")
 async def github_oauth_callback(
-    code: str = Query(..., description="Authorization code from GitHub"),
-    state: str = Query(..., description="State parameter for CSRF validation"),
+    code: Optional[str] = Query(None, description="Authorization code from GitHub"),
+    state: Optional[str] = Query(None, description="State parameter for CSRF validation"),
+    error: Optional[str] = Query(None, description="Error from GitHub"),
+    error_description: Optional[str] = Query(None, description="Error description"),
     code_verifier: Optional[str] = Query(None, description="PKCE code verifier (optional)"),
     db: Session = Depends(get_db),
 ):
     """
     Handle GitHub OAuth callback
-
-    If `code_verifier` is not provided (typical browser redirect), this endpoint
-    returns a short JSON instructing the client to POST the `code_verifier`
-    to complete the PKCE exchange. If `code_verifier` is provided, it will
-    perform the token exchange and return tokens as before.
+    
+    Validates:
+    - code is present
+    - state is present
+    - code and state are valid
+    
+    For browser redirects: Returns JSON response
+    For CLI: Expects code_verifier in query to complete exchange
     """
     try:
+        # Check for OAuth errors from GitHub
+        if error:
+            error_msg = error_description or error
+            raise HTTPException(
+                status_code=400,
+                detail=f"OAuth error from GitHub: {error_msg}",
+            )
+        
+        # Validate code is present
+        if not code:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing authorization code",
+            )
+        
+        # Validate state is present
+        if not state:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing state parameter - CSRF token validation failed",
+            )
+        
         oauth_handler = GitHubOAuthHandler()
-
+        
         # If client did not provide code_verifier (browser redirect), return instructions
         if not code_verifier:
             return {
                 "status": "partial",
-                "message": "Authorization code received. POST the code_verifier to /auth/github/callback to complete the exchange.",
+                "message": "Authorization code received. POST the code_verifier to /auth/github/complete to finish authorization.",
                 "code": code,
                 "state": state,
             }
-
+        
         # Exchange code for GitHub token
-        github_token_response = await oauth_handler.exchange_code_for_token(code, code_verifier)
+        try:
+            github_token_response = await oauth_handler.exchange_code_for_token(code, code_verifier)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid code or code_verifier: {str(e)}",
+            )
+        
         github_access_token = github_token_response.get("access_token")
         
         if not github_access_token:
@@ -200,16 +236,34 @@ async def github_oauth_complete(
 
 @router.post("/refresh")
 async def refresh_tokens(
-    request_body: dict,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """
     Refresh access token using refresh token
     
-    Invalidates old refresh token and issues new pair
+    POST only - Invalidates old refresh token and issues new pair
+    
+    Request body: {"refresh_token": "..."}
     """
     try:
-        refresh_token = request_body.get("refresh_token")
+        # Enforce POST method
+        if request.method != "POST":
+            raise HTTPException(
+                status_code=405,
+                detail="Method Not Allowed - use POST",
+            )
+        
+        # Parse request body
+        try:
+            body = await request.json()
+        except:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid JSON in request body",
+            )
+        
+        refresh_token = body.get("refresh_token")
         
         if not refresh_token:
             raise HTTPException(
