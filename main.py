@@ -47,7 +47,7 @@ app.add_middleware(
 # Add custom middleware in reverse order (last added = first executed)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(LoggingMiddleware)
-app.add_middleware(RateLimitMiddleware, auth_limit=100, general_limit=200)
+app.add_middleware(RateLimitMiddleware, auth_limit=1000, general_limit=20000)
 
 # Include routes
 app.include_router(auth_router)
